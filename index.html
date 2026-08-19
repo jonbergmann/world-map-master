@@ -406,7 +406,7 @@
     <!-- PLAY TAB (one at a time, circled on map) -->
     <div class="panel tab-pane" id="tab-play">
       <h2>Play — One Place at a Time</h2>
-      <p class="note" style="margin-top:-6px;">A circle will appear on the map at left. Identify it and type your answer — spelling doesn't need to be perfect, just close.</p>
+      <p class="note" style="margin-top:-6px;">The map at left will automatically zoom in on each location with a glowing circle. Identify it and type your answer — spelling doesn't need to be perfect, just close.</p>
       <div class="filters" id="filters-play"></div>
       <div class="actions" style="margin-top:0;margin-bottom:6px;">
         <button class="btn" id="startPlay">Start / Restart</button>
@@ -701,6 +701,37 @@ function scrollMapTo(item){
   });
 }
 
+/* -------- auto zoom-in per question (Play / Multiple Choice) --------
+   Small countries and point features get zoomed in tight so the glowing
+   circle is easy to pinpoint; large features (continents, oceans, mountain
+   ranges) stay at full-map view since zooming in would lose context. */
+const ZOOM_FULL_NAMES = new Set([
+  "North Atlantic Ocean","Indian Ocean","South Atlantic Ocean",
+  "South Pacific Ocean","North Pacific Ocean","Southern Ocean","Arctic Ocean",
+  "Himalayan Mountains","Andes Mountains","Ural Mountains","Swiss Alps",
+  "Cascade Mountains","Rocky Mountains","Mid-Atlantic Ridge"
+]);
+const ZOOM_WIDE_NAMES = new Set([
+  "Hudson Bay","Mediterranean Sea","Gulf of Mexico","South China Sea",
+  "Sea of Japan","Caspian Sea","Black Sea","Great Lakes","Caribbean Sea",
+  "North Sea","Persian Gulf","Red Sea"
+]);
+function zoomModeFor(item){
+  if(item.category === "continent" || ZOOM_FULL_NAMES.has(item.name)) return "full";
+  if(ZOOM_WIDE_NAMES.has(item.name)) return "wide";
+  return "tight";
+}
+const ZOOM_WIDTH_PCT = { full: "100%", wide: "233%", tight: "447%" };
+function focusMapOn(item){
+  const wrap = document.getElementById("mapWrap");
+  wrap.style.width = ZOOM_WIDTH_PCT[zoomModeFor(item)];
+  renderMarkerOnly(item);
+  scrollMapTo(item);
+}
+function resetMapZoom(){
+  document.getElementById("mapWrap").style.width = "";
+}
+
 /* ---------------- tabs ---------------- */
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
@@ -708,6 +739,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.classList.add("active");
     document.querySelectorAll(".tab-pane").forEach(p=>p.classList.add("hidden"));
     document.getElementById("tab-"+btn.dataset.tab).classList.remove("hidden");
+    resetMapZoom();
     if(btn.dataset.tab === "dash") renderDashboard();
     if(btn.dataset.tab === "study") renderBadges(filteredItems("filters-study"));
     if(btn.dataset.tab === "quiz") renderBadges(filteredItems("filters-quiz"));
@@ -919,6 +951,7 @@ function nextPlayCard(){
   const stage = document.getElementById("playStage");
   if(playDeck.length===0){
     clearOverlay();
+    resetMapZoom();
     stage.innerHTML = `<p class="feedback good">Round complete! You got ${playCorrectCount}/${playTotal} correct on first try.</p>
       <p class="note">Click "Start / Restart" to shuffle a new round, or "Drill My Weak Spots" to focus only on what you've missed.</p>`;
     document.getElementById("playProgressBar").style.width = "100%";
@@ -926,8 +959,7 @@ function nextPlayCard(){
   }
   const item = playDeck.shift();
   const cat = CATS.find(c=>c.key===item.category);
-  renderMarkerOnly(item);
-  scrollMapTo(item);
+  focusMapOn(item);
   stage.innerHTML = `
     <div class="flash-category"><span class="catdot" style="background:var(--${cat.color});"></span>${cat.label} — find the glowing circle on the map</div>
     <div><input type="text" id="playInput" placeholder="Type your answer" autocomplete="off" spellcheck="false"></div>
@@ -1009,14 +1041,14 @@ function nextMc(){
   const stage = document.getElementById("mcStage");
   if(mcDeck.length===0){
     clearOverlay();
+    resetMapZoom();
     stage.innerHTML = `<p class="feedback good">Done! ${mcCorrect}/${mcTotal} correct.</p>`;
     document.getElementById("mcProgressBar").style.width = "100%";
     return;
   }
   const item = mcDeck.shift();
   const cat = CATS.find(c=>c.key===item.category);
-  renderMarkerOnly(item);
-  scrollMapTo(item);
+  focusMapOn(item);
   let pool = MAP_DATA.filter(d=>d.category===item.category && d.id!==item.id);
   pool = shuffle(pool).slice(0,3);
   if(pool.length < 3){
